@@ -154,6 +154,17 @@ describe('scan', function () {
     expect(actual).to.eql(expected);
   });
 
+  it('scans VIEW keyword', () => {
+    const actual = scanToken(initState('VIEW'));
+    const expected = {
+      type: 'keyword',
+      value: 'VIEW',
+      start: 0,
+      end: 3,
+    };
+    expect(actual).to.eql(expected);
+  });
+
   it('scans DATABASE keyword', function () {
     const actual = scanToken(initState('DATABASE'));
     const expected = {

@@ -5,12 +5,14 @@ export type StatementType = 'INSERT'
   | 'DELETE'
   | 'SELECT'
   | 'TRUNCATE'
-  | 'CREATE_TABLE'
   | 'CREATE_DATABASE'
+  | 'CREATE_TABLE'
+  | 'CREATE_VIEW'
   | 'CREATE_TRIGGER'
   | 'CREATE_FUNCTION'
-  | 'DROP_TABLE'
   | 'DROP_DATABASE'
+  | 'DROP_TABLE'
+  | 'DROP_VIEW'
   | 'DROP_TRIGGER'
   | 'DROP_FUNCTION'
   | 'UNKNOWN';
@@ -36,7 +38,9 @@ export interface Statement {
   executionType?: ExecutionType;
   endStatement?: string;
   canEnd?: boolean;
-  definer?: number | false;
+  definer?: number;
+  algorithm?: number;
+  sqlSecurity?: number;
 }
 
 export interface ConcreteStatement extends Statement {

@@ -34,12 +34,14 @@ This way you have sure is a valid query before trying to identify the types.
 * DELETE
 * SELECT
 * TRUNCATE
-* CREATE_TABLE
 * CREATE_DATABASE
+* CREATE_TABLE
+* CREATE_VIEW
 * CREATE_TRIGGER
 * CREATE_FUNCTION
-* DROP_TABLE
 * DROP_DATABASE
+* DROP_TABLE
+* DROP_VIEW
 * DROP_TRIGGER
 * DROP_FUNCTION
 * UNKNOWN (only available if strict mode is disabled)

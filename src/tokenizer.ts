@@ -14,12 +14,14 @@ const KEYWORDS = [
   'CREATE',
   'DROP',
   'TABLE',
+  'VIEW',
   'TRIGGER',
   'FUNCTION',
   'DATABASE',
   'TRUNCATE',
   'WITH',
   'AS',
+  'MATERIALIZED',
 ];
 
 const INDIVIDUALS: Record<string, Token['type']> = {

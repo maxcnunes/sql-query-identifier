@@ -30,10 +30,12 @@ const EXECUTION_TYPES: Record<StatementType, ExecutionType> = {
   UPDATE: 'MODIFICATION',
   CREATE_DATABASE: 'MODIFICATION',
   CREATE_TABLE: 'MODIFICATION',
+  CREATE_VIEW: 'MODIFICATION',
   CREATE_TRIGGER: 'MODIFICATION',
   CREATE_FUNCTION: 'MODIFICATION',
   DROP_DATABASE: 'MODIFICATION',
   DROP_TABLE: 'MODIFICATION',
+  DROP_VIEW: 'MODIFICATION',
   DROP_TRIGGER: 'MODIFICATION',
   DROP_FUNCTION: 'MODIFICATION',
   TRUNCATE: 'MODIFICATION',
@@ -335,8 +337,9 @@ function createCreateStatementParser (options: ParseOptions) {
       validation: {
         requireBefore: ['whitespace'],
         acceptTokens: [
-          { type: 'keyword', value: 'TABLE' },
           { type: 'keyword', value: 'DATABASE' },
+          { type: 'keyword', value: 'TABLE' },
+          { type: 'keyword', value: 'VIEW' },
           { type: 'keyword', value: 'TRIGGER' },
           { type: 'keyword', value: 'FUNCTION' },
         ],
@@ -376,8 +379,9 @@ function createDropStatementParser (options: ParseOptions) {
       validation: {
         requireBefore: ['whitespace'],
         acceptTokens: [
-          { type: 'keyword', value: 'TABLE' },
           { type: 'keyword', value: 'DATABASE' },
+          { type: 'keyword', value: 'TABLE' },
+          { type: 'keyword', value: 'VIEW' },
           { type: 'keyword', value: 'TRIGGER' },
           { type: 'keyword', value: 'FUNCTION' },
         ],
@@ -503,15 +507,31 @@ function stateMachineStatementParser (statement: Statement, steps: Step[], { isS
         return;
       }
 
-      // Postgres allows for optional "OR REPLACE" between "CREATE" and "FUNCTION", so we need to ignore
-      // these tokens.
-      if (dialect === 'psql' && ['OR', 'REPLACE'].includes(token.value.toUpperCase())) {
+      if (token.type === 'keyword' && blockOpeners[dialect].includes(token.value) && prevPrevToken.value !== 'END') {
+        openBlocks++;
         setPrevToken(token);
         return;
       }
 
-      if (token.type === 'keyword' && blockOpeners[dialect].includes(token.value) && prevPrevToken.value !== 'END') {
-        openBlocks++;
+      if (statement.type) {
+        // statement has already been identified
+        // just wait until end of the statement
+        return;
+      }
+
+      if (['psql', 'mssql'].includes(dialect) && token.value.toUpperCase() === 'MATERIALIZED') {
+        setPrevToken(token);
+        return;
+      }
+
+      // psql allows for optional "OR REPLACE" between "CREATE" and "FUNCTION"
+      // mysql and psql allow it between "CREATE" and "VIEW"
+      if (['psql', 'mysql'].includes(dialect) && ['OR', 'REPLACE'].includes(token.value.toUpperCase())) {
+        setPrevToken(token);
+        return;
+      }
+
+      if (['psql', 'sqlite'].includes(dialect) && ['TEMP', 'TEMPORARY'].includes(token.value.toUpperCase())) {
         setPrevToken(token);
         return;
       }
@@ -530,7 +550,7 @@ function stateMachineStatementParser (statement: Statement, steps: Step[], { isS
         return;
       }
 
-      if (typeof statement.definer === 'number' && statement.definer > 0) {
+      if (statement.definer !== undefined && statement.definer > 0) {
         if (statement.definer === 1 && prevToken.type === 'whitespace') {
           statement.definer++;
           setPrevToken(token);
@@ -542,13 +562,54 @@ function stateMachineStatementParser (statement: Statement, steps: Step[], { isS
           return;
         }
 
-        statement.definer = false;
+        delete statement.definer;
       }
 
-      if (statement.type) {
-        // statement has already been identified
-        // just wait until end of the statement
+      if (dialect === 'mysql' && token.value.toUpperCase() === 'ALGORITHM') {
+        statement.algorithm = 0;
+        setPrevToken(token);
         return;
+      }
+
+      if (statement.algorithm === 0 && token.value === '=') {
+        statement.algorithm++;
+        setPrevToken(token);
+        return;
+      }
+
+      if (statement.algorithm !== undefined && statement.algorithm > 0) {
+        if (statement.algorithm === 1 && prevToken.type === 'whitespace') {
+          statement.algorithm++;
+          setPrevToken(token);
+          return;
+        }
+
+        if (statement.algorithm > 1 && ['UNDEFINED', 'MERGE', 'TEMPTABLE'].includes(prevToken.value.toUpperCase())) {
+          setPrevToken(token);
+          return;
+        }
+
+        delete statement.algorithm;
+      }
+
+      if (dialect === 'mysql' && token.value.toUpperCase() === 'SQL') {
+        statement.sqlSecurity = 0;
+        setPrevToken(token);
+        return;
+      }
+
+      if (statement.sqlSecurity !== undefined) {
+        if (
+          (statement.sqlSecurity === 0 && token.value.toUpperCase() === 'SECURITY') ||
+          (statement.sqlSecurity === 1 && ['DEFINER', 'INVOKER'].includes(token.value.toUpperCase()))
+        ) {
+          statement.sqlSecurity++;
+          setPrevToken(token);
+          return;
+        }
+        else if (statement.sqlSecurity === 2) {
+          delete statement.sqlSecurity;
+        }
       }
 
       let currentStep = steps[currentStepIndex];

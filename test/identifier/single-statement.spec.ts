@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 
-import { identify } from '../../src';
+import { Dialect, identify } from '../../src';
 
 /* eslint prefer-arrow-callback: 0 */
 describe('identifier', function () {
@@ -78,6 +78,148 @@ describe('identifier', function () {
       ];
 
       expect(actual).to.eql(expected);
+    });
+
+    describe('identify "CREATE VIEW" statements', () => {
+      it('should identify "CREATE VIEW" statement', () => {
+        const actual = identify("CREATE VIEW vista AS SELECT 'Hello World';");
+        const expected = [
+          {
+            start: 0,
+            end: 41,
+            text: "CREATE VIEW vista AS SELECT 'Hello World';",
+            type: 'CREATE_VIEW',
+            executionType: 'MODIFICATION',
+          },
+        ];
+
+        expect(actual).to.eql(expected);
+      });
+
+      describe('identifying "CREATE MATERIALIZED VIEW" statement', () => {
+        const query = "CREATE MATERIALIZED VIEW vista AS SELECT 'Hello World';";
+        (['psql', 'mssql'] as Dialect[]).forEach((dialect) => {
+          it(`should identify for ${dialect}`, () => {
+            const actual = identify(query, { dialect });
+            const expected = [
+              {
+                start: 0,
+                end: 54,
+                text: query,
+                type: 'CREATE_VIEW',
+                executionType: 'MODIFICATION',
+              },
+            ];
+
+            expect(actual).to.eql(expected);
+          });
+        });
+
+        (['generic', 'mysql', 'sqlite'] as Dialect[]).forEach((dialect) => {
+          it(`should throw error for ${dialect}`, () => {
+            expect(() => identify(query, { dialect })).to.throw(
+              /^Expected any of these tokens .* instead of type="keyword" value="MATERIALIZED" \(currentStep=1\)/
+            );
+          });
+        });
+      });
+
+      describe('identify "CREATE OR REPLACE VIEW" statement', () => {
+        const query = "CREATE OR REPLACE VIEW vista AS SELECT 'Hello world';";
+        (['mysql', 'psql'] as Dialect[]).forEach((dialect) => {
+          it(`should identify for ${dialect}`, () => {
+            const actual = identify(query, { dialect });
+            const expected = [
+              {
+                start: 0,
+                end: 52,
+                text: query,
+                type: 'CREATE_VIEW',
+                executionType: 'MODIFICATION',
+              },
+            ];
+
+            expect(actual).to.eql(expected);
+          });
+        });
+
+        (['generic', 'sqlite', 'mssql'] as Dialect[]).forEach((dialect) => {
+          it(`should throw error for ${dialect}`, () => {
+            expect(() => identify(query, { dialect })).to.throw(
+              /^Expected any of these tokens .* instead of type="unknown" value="OR" \(currentStep=1\)/
+            )
+          });
+        });
+      });
+
+      ['TEMP', 'TEMPORARY'].forEach((temp) => {
+        describe(`identify "CREATE ${temp} VIEW" statement`, () => {
+          const query = `CREATE ${temp} VIEW vista AS SELECT 'Hello world';`;
+          (['sqlite', 'psql'] as Dialect[]).forEach((dialect) => {
+            it(`should identify for ${dialect}`, () => {
+              const actual = identify(query, { dialect });
+              const expected = [
+                {
+                  start: 0,
+                  end:  42 + temp.length,
+                  text: query,
+                  type: 'CREATE_VIEW',
+                  executionType: 'MODIFICATION',
+                },
+              ];
+
+              expect(actual).to.eql(expected);
+            });
+          });
+
+          (['generic', 'mysql', 'mssql'] as Dialect[]).forEach((dialect) => {
+            it(`should throw error for ${dialect}`, () => {
+              const regex = new RegExp(`Expected any of these tokens .* instead of type="unknown" value="${temp}" \\(currentStep=1\\)`);
+              expect(() => identify(query, { dialect })).to.throw(regex);
+            });
+          });
+        });
+      });
+
+      describe('identify "CREATE VIEW" with algorithm for mysql', () => {
+        ['UNDEFINED', 'MERGE', 'TEMPTABLE'].forEach((algo) => {
+          it(`should identify "CREATE ALGORITHM = ${algo}"`, () => {
+            const query = `CREATE ALGORITHM = ${algo} VIEW vista AS SELECT 'Hello World';`;
+            const actual = identify(query, { dialect: 'mysql' });
+            const expected = [
+              {
+                start: 0,
+                end: 54 + algo.length,
+                text: query,
+                type: 'CREATE_VIEW',
+                executionType: 'MODIFICATION',
+              },
+            ];
+
+            expect(actual).to.eql(expected);
+          });
+        });
+      });
+
+      describe('identify "CREATE VIEW" with SQL SECURITY for mysql', () => {
+        ['DEFINER', 'INVOKER'].forEach((type) => {
+          it(`should identify "SQL SECURITY ${type}"`, () => {
+            const query = `CREATE SQL SECURITY ${type} VIEW vista AS SELECT 'Hello World';`;
+            const actual = identify(query, { dialect: 'mysql' });
+            const expected = [
+              {
+                start: 0,
+                end: 55 + type.length,
+                text: query,
+                type: 'CREATE_VIEW',
+                executionType: 'MODIFICATION',
+              },
+            ];
+
+            expect(actual).to.eql(expected);
+          });
+        });
+      })
     });
 
     it('should identify sqlite "CREATE TRIGGER" statement', function () {
@@ -362,6 +504,21 @@ describe('identifier', function () {
           end: 18,
           text: 'DROP TABLE Persons;',
           type: 'DROP_TABLE',
+          executionType: 'MODIFICATION',
+        },
+      ];
+
+      expect(actual).to.eql(expected);
+    });
+
+    it('should identify "DROP VIEW" statement', () => {
+      const actual = identify('DROP VIEW kinds;');
+      const expected = [
+        {
+          start: 0,
+          end: 15,
+          text: 'DROP VIEW kinds;',
+          type: 'DROP_VIEW',
           executionType: 'MODIFICATION',
         },
       ];
